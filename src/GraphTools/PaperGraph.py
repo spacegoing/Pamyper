@@ -16,6 +16,7 @@ config_path = project_path + '/config/'
 # TODO: Add funcs for parse/resemble topic list
 # TODO: Read BibTex
 # TODO: Chinese Compatible
+# TODO: Rewrite it with nx.Graph
 # File No: 32 	 高阶马尔科夫随机场及其在场景理解中的应用
 # abbr: 高
 
@@ -47,6 +48,7 @@ class PaperGraph:
             self.attrs = ['abbr', 'apa', 'absPath', 'descrip', 'tag', 'title',
                           'topic']
             self.G = nx.Graph()
+        self.node = self.G.node
 
     def set_main_paper(self, node_no):
         self.main_paper.append(node_no)
