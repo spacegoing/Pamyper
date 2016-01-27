@@ -7,10 +7,17 @@ import json
 from pprint import pprint
 
 file_path = os.path.dirname(os.path.abspath(__file__))
-project_path = os.path.abspath(os.path.join(file_path, *2*[os.path.pardir]))
-graph_database_path = project_path+'/GraphDatabase/'
-config_path = project_path+'/config/'
+project_path = os.path.abspath(os.path.join(file_path, *2 * [os.path.pardir]))
+graph_database_path = project_path + '/GraphDatabase/'
+config_path = project_path + '/config/'
+
+
 # TODO: Refract attrs. Isolate add_paper and self.attrs
+# TODO: Add funcs for parse/resemble topic list
+# TODO: Read BibTex
+# TODO: Chinese Compatible
+# File No: 32 	 高阶马尔科夫随机场及其在场景理解中的应用
+# abbr: 高
 
 class PaperGraph:
     '''
@@ -81,15 +88,16 @@ class PaperGraph:
         else:
             print('Paper Already Exists: ' + title)
 
-    def find_with_title(self, title):
-        nodes_title_abbr = [(i[0], i[1]['title'], i[1]['abbr'])
+    def _find_with_title(self, title):
+        title = title.strip().lower()
+        nodes_title_abbr = [(i[0], i[1]['title'], i[1]['abbr'], i[1]['apa'])
                             for i in self.G.nodes(data=True)]
-        node_title_abbr = (i for i in nodes_title_abbr if title.strip().lower() == i[2])
+        node_title_abbr = [i for i in nodes_title_abbr if title.strip().lower() == i[2]]
 
         assert node_title_abbr, 'Paper not found'
         return node_title_abbr
 
-    def find_with_abbr(self, abbr):
+    def _find_with_abbr(self, abbr):
         '''
 
         :param abbr:
@@ -97,41 +105,47 @@ class PaperGraph:
         node_title_abbr: tuple: (node_no:int, title:string, abbr:string),...]
         '''
         abbr = abbr.strip().lower()
-        nodes_title_abbr = [(i[0], i[1]['title'], i[1]['abbr'])
+        nodes_title_abbr = [(i[0], i[1]['title'], i[1]['abbr'], i[1]['apa'])
                             for i in self.G.nodes(data=True)]
         node_title_abbr = [i for i in nodes_title_abbr if i[2].startswith(abbr)]
 
         assert node_title_abbr, 'Paper not found'
         if len(node_title_abbr) > 1:
             print("\nMultiple Matches: ")
-            for no, title, abbr in node_title_abbr:
-                scheme = 'File No: %d \t %s\nabbr: %s'
-                print(scheme % (no, title, abbr))
+            for no, title, abbr, apa in node_title_abbr:
+                scheme = 'File No: %d \t %s \t %s\nabbr: %s'
+                print(scheme % (no, title, apa, abbr))
             assert False
 
-        return node_title_abbr[0]
+        return node_title_abbr
 
-    def _alter_attr(self, node_no, **kwargs):
-        '''
+    def _find_with_APA(self, apa):
+        apa = apa.strip().lower()
+        nodes_title_abbr = [(i[0], i[1]['title'], i[1]['abbr'], i[1]['apa'])
+                            for i in self.G.nodes(data=True)]
+        node_title_abbr = [i for i in nodes_title_abbr if i[3] == apa]
 
-        :param abbr:
-        :param kwargs: {title:string, absPath:string, descrip:string,
-                        abbr:string, apa:string,
-                        topic: ',' concat string tokens,
-                        tag:',' concat string tokens}
-        :return:
-        '''
-        coma_conca_attrs_list = ['topic', 'tag']
-        for k, v in kwargs.items():
-            if k in self.attrs:
+        assert node_title_abbr, 'Paper not found'
+        if len(node_title_abbr) > 1:
+            print("\nMultiple Matches: ")
+            for no, title, abbr, apa in node_title_abbr:
+                scheme = 'File No: %d \t %s \t %s\nabbr: %s'
+                print(scheme % (no, title, apa, abbr))
+            assert False
 
-                if k in coma_conca_attrs_list:
-                    new_attr = self.G.node[node_no][k] + ','.join(v)
-                    nx.set_node_attributes(self.G, k, {node_no: new_attr})
-                else:
-                    nx.set_node_attributes(self.G, k, {node_no: v})
+        return node_title_abbr
+
+    def _auto_find_by_identity(self, identity):
+        identity = identity.strip().lower()
+        if len(identity.split(' ')) == 1:
+            if identity[-1].isdigit():
+                node_title_abbr = self._find_with_APA()
             else:
-                print('Key: "%s" is not an attribute of this graph' % k)
+                node_title_abbr = self._find_with_abbr(identity)
+        else:
+            node_title_abbr = self._find_with_title(identity)
+
+        return node_title_abbr
 
     def alter_attr(self, identity, **kwargs):
         '''
@@ -145,14 +159,35 @@ class PaperGraph:
                         tag:',' concat string tokens}
         :return:
         '''
-        identity = identity.strip()
-        if len(identity.split(' ')) == 1:
-            node_title_abbr = self.find_with_abbr(identity)
-        else:
-            node_title_abbr = self.find_with_title(identity)
-
+        node_title_abbr = self._auto_find_by_identity(identity)
         node_no = node_title_abbr[0]
-        self._alter_attr(node_no, **kwargs)
+
+        coma_conca_attrs_list = ['topic', 'tag']
+        for k, v in kwargs.items():
+            if k in self.attrs:
+
+                if k in coma_conca_attrs_list:
+                    new_attr = self.G.node[node_no][k] + ','.join(v)
+                    nx.set_node_attributes(self.G, k, {node_no: new_attr})
+                else:
+                    nx.set_node_attributes(self.G, k, {node_no: v})
+            else:
+                print('Key: "%s" is not an attribute of this graph' % k)
+
+    def node_add_attr(self, identity, **kwargs):
+        '''
+
+        :param identity:
+        :param kwargs:
+        :return:
+        '''
+        node_title_abbr = self._auto_find_by_identity(identity)
+        node_no = node_title_abbr[0]
+
+        for k, v in kwargs.items():
+            nx.set_node_attributes(self.G, k, {node_no: v})
+            if k not in self.attrs:
+                self.attrs.append(k)
 
     def write_config(self):
         with open(config_path + self.config_name, 'w') as outfile:
@@ -165,11 +200,7 @@ class PaperGraph:
         nx.write_gml(self.G, npath)
 
     def describe_paper(self, identity):
-        identity = identity.strip()
-        if len(identity.split(' ')) == 1:
-            node_title_abbr = self.find_with_abbr(identity)
-        else:
-            node_title_abbr = self.find_with_title(identity)
+        node_title_abbr = self._auto_find_by_identity(identity)
         node_attrs = self.G.node[node_title_abbr[0]]
 
         print('File No: ' + str(node_title_abbr[0]))
