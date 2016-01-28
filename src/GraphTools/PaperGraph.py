@@ -6,17 +6,19 @@ import os
 import json
 from pprint import pprint
 
-file_path = os.path.dirname(os.path.abspath(__file__))
-project_path = os.path.abspath(os.path.join(file_path, *2 * [os.path.pardir]))
-graph_database_path = project_path + '/GraphDatabase/'
-config_path = project_path + '/config/'
+# file_path = os.path.dirname(os.path.abspath(__file__))
+# project_path = os.path.abspath(os.path.join(file_path, *2 * [os.path.pardir]))
+# graph_database_path = project_path + '/GraphDatabase/'
+# config_path = project_path + '/config/'
+graph_database_path = '/Users/spacegoing/AllSymlinks/mac' \
+                      'CodeLab/Python/Pamyper/GraphDatabase/'
+config_path = '/Users/spacegoing/AllSymlinks/macCodeLab/Python/Pamyper/config/'
 
 
 # TODO: Refract attrs. Isolate add_paper and self.attrs
 # TODO: Add funcs for parse/resemble topic list
 # TODO: Read BibTex
 # TODO: Chinese Compatible
-# TODO: Rewrite it with nx.Graph
 # File No: 32 	 高阶马尔科夫随机场及其在场景理解中的应用
 # abbr: 高
 
@@ -40,18 +42,15 @@ class PaperGraph:
         if self.project_name in files_list:
             with open(config_path + self.config_name, 'r') as infile:
                 config_file = json.load(infile)
-            self.main_paper = config_file['main_paper']
+            self.main_paper = set(config_file['main_paper'])
             self.attrs = config_file['attrs']
             self.G = nx.read_gml(graph_database_path + self.project_name)
         else:
-            self.main_paper = list()
+            self.main_paper = set()
             self.attrs = ['abbr', 'apa', 'absPath', 'descrip', 'tag', 'title',
                           'topic']
             self.G = nx.Graph()
         self.node = self.G.node
-
-    def set_main_paper(self, node_no):
-        self.main_paper.append(node_no)
 
     def add_paper(self, title, abs_path, topic=[], descrip='', tag=[], apa=''):
         '''
@@ -90,66 +89,86 @@ class PaperGraph:
         else:
             print('Paper Already Exists: ' + title)
 
-    def _find_with_title(self, title):
-        title = title.strip().lower()
-        nodes_title_abbr = [(i[0], i[1]['title'], i[1]['abbr'], i[1]['apa'])
-                            for i in self.G.nodes(data=True)]
-        node_title_abbr = [i for i in nodes_title_abbr if title.strip().lower() == i[2]]
+    def _compare_apa(self, identity, node_info):
+        if node_info['apa'].startswith(identity):
+            return True
+        else:
+            return False
 
-        assert node_title_abbr, 'Paper not found'
-        return node_title_abbr
+    def _compare_title(self, identity, node_info):
+        if node_info['title'] == identity:
+            return True
+        else:
+            return False
 
-    def _find_with_abbr(self, abbr):
+    def _compare_abbr(self, identity, node_info):
+        if node_info['abbr'].startswith(identity):
+            return True
+        else:
+            return False
+
+    def _which_id_type(self, identity):
         '''
-
-        :param abbr:
+        Distinguish apa, title, abbr identity.
+        If can't determine, raise an error.
+        :param identity:
         :return:
-        node_title_abbr: tuple: (node_no:int, title:string, abbr:string),...]
         '''
-        abbr = abbr.strip().lower()
-        nodes_title_abbr = [(i[0], i[1]['title'], i[1]['abbr'], i[1]['apa'])
-                            for i in self.G.nodes(data=True)]
-        node_title_abbr = [i for i in nodes_title_abbr if i[2].startswith(abbr)]
-
-        assert node_title_abbr, 'Paper not found'
-        if len(node_title_abbr) > 1:
-            print("\nMultiple Matches: ")
-            for no, title, abbr, apa in node_title_abbr:
-                scheme = 'File No: %d \t %s \t %s\nabbr: %s'
-                print(scheme % (no, title, apa, abbr))
-            assert False
-
-        return node_title_abbr
-
-    def _find_with_APA(self, apa):
-        apa = apa.strip().lower()
-        nodes_title_abbr = [(i[0], i[1]['title'], i[1]['abbr'], i[1]['apa'])
-                            for i in self.G.nodes(data=True)]
-        node_title_abbr = [i for i in nodes_title_abbr if i[3] == apa]
-
-        assert node_title_abbr, 'Paper not found'
-        if len(node_title_abbr) > 1:
-            print("\nMultiple Matches: ")
-            for no, title, abbr, apa in node_title_abbr:
-                scheme = 'File No: %d \t %s \t %s\nabbr: %s'
-                print(scheme % (no, title, apa, abbr))
-            assert False
-
-        return node_title_abbr
-
-    def _auto_find_by_identity(self, identity):
         identity = identity.strip().lower()
         if len(identity.split(' ')) == 1:
             if identity[-1].isdigit():
-                node_title_abbr = self._find_with_APA()
+                return self._compare_apa
             else:
-                node_title_abbr = self._find_with_abbr(identity)
+                return self._compare_abbr
         else:
-            node_title_abbr = self._find_with_title(identity)
+            return self._compare_title
 
-        return node_title_abbr
+        raise Exception('Unrecognised identity type.\n'
+                      'Supported Types: apa, title, abbr')
 
-    def alter_attr(self, identity, **kwargs):
+    def _find_by_identity(self, identity, attrs_retrieving=['apa', 'abbr', 'title']):
+        '''
+        Return attrs want to retrieve by specify identity.
+        Identity can be automated detected by using
+        'apa, title, abbr'.
+
+        :param identity:
+        :param attrs_retrieving: list of strings. Default: apa, title, abbr identity
+                            If this param is empty[], return node_no only
+        :return:
+        nodes_attrs: list. [node_no:int, value of attrs_retrieving]
+        '''
+        condition_func = self._which_id_type(identity)
+        nodes_attrs = [[i[0]] + [i[1][j] for j in attrs_retrieving]
+                       for i in self.G.nodes_iter(data=True)
+                       if condition_func(identity, i[1])]
+        assert nodes_attrs, 'Paper not found'
+        if len(nodes_attrs) > 1:
+            print("Multiple Matches")
+            for i in nodes_attrs:
+                print('Paper No: %d' % i[0])
+                print('Paper Title: %s' % self.node[i[0]]['title'])
+                print('abbr: %s\tApa: %s' %
+                      (self.node[i[0]]['abbr'], self.node[i[0]]['apa']))
+            raise Exception('Multiple Matches')  # TODO: Refract this to return
+
+        return nodes_attrs
+
+    def find_node_no(self, identity):
+        '''
+        The input can be int, string for apa, abbr, title
+
+        :param identity: apa, abbr, title or:
+                node_no:int if node_no returned,
+                return node_no directly
+        :return: int. node_no
+        '''
+        if isinstance(identity, int):
+            return identity
+        else:
+            return self._find_by_identity(identity, [])[0][0]
+
+    def node_alter_attr(self, identity, **kwargs):
         '''
 
         :param identity: Can either be full title,
@@ -161,8 +180,7 @@ class PaperGraph:
                         tag:',' concat string tokens}
         :return:
         '''
-        node_title_abbr = self._auto_find_by_identity(identity)
-        node_no = node_title_abbr[0]
+        node_no = self.find_node_no(identity)
 
         coma_conca_attrs_list = ['topic', 'tag']
         for k, v in kwargs.items():
@@ -183,17 +201,20 @@ class PaperGraph:
         :param kwargs:
         :return:
         '''
-        node_title_abbr = self._auto_find_by_identity(identity)
-        node_no = node_title_abbr[0]
+        node_no = self.find_node_no(identity)
 
         for k, v in kwargs.items():
             nx.set_node_attributes(self.G, k, {node_no: v})
             if k not in self.attrs:
                 self.attrs.append(k)
 
+    def set_main_paper(self, identity):
+        node_no = self.find_node_no(identity)
+        self.main_paper.add(node_no)
+
     def write_config(self):
         with open(config_path + self.config_name, 'w') as outfile:
-            json.dump({'main_paper': self.main_paper,
+            json.dump({'main_paper': list(self.main_paper),
                        'attrs': self.attrs}, outfile)
 
     def save_graph(self):
@@ -202,37 +223,28 @@ class PaperGraph:
         nx.write_gml(self.G, npath)
 
     def describe_paper(self, identity):
-        node_title_abbr = self._auto_find_by_identity(identity)
-        node_attrs = self.G.node[node_title_abbr[0]]
+        node_no = self.find_node_no(identity)
+        node_attrs = self.G.node[node_no]
 
-        print('File No: ' + str(node_title_abbr[0]))
+        print('File No: ' + str(node_no))
         for k, v in node_attrs.items():
             print(k + ': ' + v)
 
-    def display_by_apa(self, apa):
-        nodes_attr = self.G.nodes(data=True)
-        for node, attrs in nodes_attr:
-            if apa == attrs['apa']:
-                self.describe_paper(attrs['title'])
-
     def display_papers(self):
         for node, data in self.G.nodes_iter(data=True):
-            scheme = 'File No: %d \t %s\nabbr: %s'
-            print(scheme % (node, data['title'], data['abbr']))
-
-    def display_papers_with_attrs(self):
-        pprint(self.G.nodes(data=True))
+            scheme = 'File No: %d \t %s\nabbr: %s\tapa: %s'
+            print(scheme % (node, data['title'], data['abbr'], data['apa']))
 
 
 if __name__ == '__main__':
     project_name = 'Honours_Project'
     PG = PaperGraph(project_name)
-    abs_path = '/Users/spacegoing/AllSymlinks/macANU/honor' \
-               'sProjects/Proposal/PAMI/pami14-linEnvLearn.pdf'
-    title = 'Learning Weighted Lower Linear Envelope Po' \
-            'tentials in Binary Markov Random Fields'
-    PG.add_paper(title, abs_path)
-    PG.display_papers_with_attrs()
-    PG.describe_paper('lwll')
+    # abs_path = '/Users/spacegoing/AllSymlinks/macANU/honor' \
+    #            'sProjects/Proposal/PAMI/pami14-linEnvLearn.pdf'
+    # title = 'Learning Weighted Lower Linear Envelope Po' \
+    #         'tentials in Binary Markov Random Fields'
+    # PG.add_paper(title, abs_path)
+    # PG.display_papers_with_attrs()
+    # PG.describe_paper('lwll')
     PG.save_graph()
 ##

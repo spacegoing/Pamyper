@@ -2,7 +2,6 @@
 __author__ = 'spacegoing'
 ## Read title, shell files and save to PaperGraph
 from src.GraphTools.PaperGraph import PaperGraph
-from src.IOtools.BibIO import query
 shell_path = '/Users/spacegoing/AllSymlinks/macANU' \
              '/honorsProjects/Proposal/PAMI/pdflist.sh'
 title_path = '/Users/spacegoing/AllSymlinks/macANU/honors' \
@@ -22,6 +21,7 @@ PG = PaperGraph(project_name)
 for t, p in zip(title_list, path_list):
     PG.add_paper(t, p)
 PG.display_papers()
+PG.set_main_paper('lholl')
 PG.save_graph()
 ## Retrieve all PaperGraph's bibTex from Google
 # Write the bib_list to .bib file
