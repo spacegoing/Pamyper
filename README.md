@@ -6,3 +6,7 @@ Manage papers' directory. Describe reference relations between papers and group 
 - Draw features, clickable with absPath
 - Display tags; Color with tags.
 - Save/autoload graph.
+
+## Sample Repository
+You can download sample repository from this link:
+http://pan.baidu.com/s/1hrrskkc
