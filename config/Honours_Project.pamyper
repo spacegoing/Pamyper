@@ -1,1 +1,1 @@
-{"attrs": ["abbr", "apa", "absPath", "descrip", "tag", "title", "topic"], "main_paper": []}
+{"attrs": ["descrip", "absPath", "title", "apa", "abbr", "tag", "topic"], "list_to_comma_sep_attrs": ["tag", "topic"], "main_paper": []}

@@ -15,6 +15,7 @@ graph_database_path = '/Users/spacegoing/AllSymlinks/mac' \
 config_path = '/Users/spacegoing/AllSymlinks/macCodeLab/Python/Pamyper/config/'
 
 
+# TODO: Identity decoriter lower strip
 # TODO: Refract attrs. Isolate add_paper and self.attrs
 # TODO: Add funcs for parse/resemble topic list
 # TODO: Read BibTex
@@ -39,18 +40,46 @@ class PaperGraph:
         self.project_name = project_name + '.gml'
         self.config_name = project_name + '.pamyper'
         files_list = os.listdir(graph_database_path)
+
         if self.project_name in files_list:
             with open(config_path + self.config_name, 'r') as infile:
                 config_file = json.load(infile)
             self.main_paper = set(config_file['main_paper'])
-            self.attrs = config_file['attrs']
+            self.attrs = set(config_file['attrs'])
+            self.list_to_comma_sep_attrs = \
+                set(config_file['list_to_comma_sep_attrs'])
             self.G = nx.read_gml(graph_database_path + self.project_name)
         else:
             self.main_paper = set()
-            self.attrs = ['abbr', 'apa', 'absPath', 'descrip', 'tag', 'title',
-                          'topic']
+            self.attrs = {'abbr', 'apa', 'absPath', 'descrip', 'tag', 'title',
+                          'topic'}
+            self.list_to_comma_sep_attrs = {'topic', 'tag'}
             self.G = nx.Graph()
+
         self.node = self.G.node
+
+    def _list_to_comma_sep_string(self, raw_list):
+        if isinstance(raw_list, list):
+            return ','.join(raw_list)
+        else:
+            return raw_list
+
+    def _comma_sep_string_to_list(self, raw_string):
+        if isinstance(raw_string, list):
+            return raw_string
+        else:
+            return raw_string.split(',')
+
+    def _conca_list_to_comma_sep_string \
+            (self, old_string, string_to_add):
+        string_to_add = self._list_to_comma_sep_string(string_to_add)
+        if old_string == '':
+            return string_to_add
+        else:
+            if string_to_add == '':
+                return old_string
+            else:
+                return old_string + ',' + string_to_add
 
     def add_paper(self, title, abs_path, topic=[], descrip='', tag=[], apa=''):
         '''
@@ -78,8 +107,8 @@ class PaperGraph:
         node_no = self.G.number_of_nodes()
         nodes_list = [i[1]['title'] for i in self.G.nodes(data=True)]
         title = title.strip().lower()
-        topic = ','.join(topic)
-        tag = ','.join(tag)
+        topic = self._list_to_comma_sep_string(topic)
+        tag = self._list_to_comma_sep_string(tag)
 
         if title not in nodes_list:
             abbr = ''.join([i[0] for i in title.split()])
@@ -123,10 +152,7 @@ class PaperGraph:
         else:
             return self._compare_title
 
-        raise Exception('Unrecognised identity type.\n'
-                      'Supported Types: apa, title, abbr')
-
-    def _find_by_identity(self, identity, attrs_retrieving=['apa', 'abbr', 'title']):
+    def find_node_with_attrs(self, identity, attrs_retrieving=['apa', 'abbr', 'title']):
         '''
         Return attrs want to retrieve by specify identity.
         Identity can be automated detected by using
@@ -138,6 +164,7 @@ class PaperGraph:
         :return:
         nodes_attrs: list. [node_no:int, value of attrs_retrieving]
         '''
+        identity = identity.lower().strip()
         condition_func = self._which_id_type(identity)
         nodes_attrs = [[i[0]] + [i[1][j] for j in attrs_retrieving]
                        for i in self.G.nodes_iter(data=True)
@@ -152,7 +179,7 @@ class PaperGraph:
                       (self.node[i[0]]['abbr'], self.node[i[0]]['apa']))
             raise Exception('Multiple Matches')  # TODO: Refract this to return
 
-        return nodes_attrs
+        return nodes_attrs[0]
 
     def find_node_no(self, identity):
         '''
@@ -163,16 +190,18 @@ class PaperGraph:
                 return node_no directly
         :return: int. node_no
         '''
+        identity = identity.lower().strip()
         if isinstance(identity, int):
             return identity
         else:
-            return self._find_by_identity(identity, [])[0][0]
+            return self.find_node_with_attrs(identity, [])[0]
 
     def node_alter_attr(self, identity, **kwargs):
         '''
 
         :param identity: Can either be full title,
                         or abbr of first char of each
+                        or node_no
                         word in title.
         :param kwargs: {title:string, absPath:string, descrip:string,
                         abbr:string, apa:string,
@@ -182,17 +211,29 @@ class PaperGraph:
         '''
         node_no = self.find_node_no(identity)
 
-        coma_conca_attrs_list = ['topic', 'tag']
+        print('Warning: must call set_list_to_comma_sep_attrs()'
+              'before add/alter list_to_comma_sep_attrs')
+
         for k, v in kwargs.items():
             if k in self.attrs:
 
-                if k in coma_conca_attrs_list:
-                    new_attr = self.G.node[node_no][k] + ','.join(v)
+                if k in self.list_to_comma_sep_attrs:
+                    new_attr = self._conca_list_to_comma_sep_string(
+                            self.G.node[node_no][k], v)
                     nx.set_node_attributes(self.G, k, {node_no: new_attr})
                 else:
                     nx.set_node_attributes(self.G, k, {node_no: v})
             else:
                 print('Key: "%s" is not an attribute of this graph' % k)
+
+    def node_reset_attr(self, identity, *args):
+        for i in args:
+            if i in self.attrs:
+                nx.set_node_attributes(self.G, i, {
+                    self.find_node_no(identity): ''
+                })
+            else:
+                print('Node :%s doesn\' has key %s.' % (identity, i))
 
     def node_add_attr(self, identity, **kwargs):
         '''
@@ -206,7 +247,23 @@ class PaperGraph:
         for k, v in kwargs.items():
             nx.set_node_attributes(self.G, k, {node_no: v})
             if k not in self.attrs:
-                self.attrs.append(k)
+                self.attrs.add(k)
+
+    def graph_delete_node(self, identity_list):
+        node_no = self.find_node_no(identity_list)
+        self.G.remove_node(node_no)
+
+    def set_list_to_comma_sep_attrs(self, attrs):
+        '''
+
+        :param attrs: either be ',' sep string
+                      or list of strings
+        :return:
+        '''
+        self.list_to_comma_sep_attrs.add(
+                tuple(self._comma_sep_string_to_list(attrs))
+        )
+        self.attrs.add(tuple(self._comma_sep_string_to_list(attrs)))
 
     def set_main_paper(self, identity):
         node_no = self.find_node_no(identity)
@@ -215,7 +272,9 @@ class PaperGraph:
     def write_config(self):
         with open(config_path + self.config_name, 'w') as outfile:
             json.dump({'main_paper': list(self.main_paper),
-                       'attrs': self.attrs}, outfile)
+                       'attrs': list(self.attrs),
+                       'list_to_comma_sep_attrs': list(self.list_to_comma_sep_attrs)
+                       }, outfile)
 
     def save_graph(self):
         self.write_config()
@@ -239,6 +298,8 @@ class PaperGraph:
 if __name__ == '__main__':
     project_name = 'Honours_Project'
     PG = PaperGraph(project_name)
+    PG.find_node_no('fast exact inference for recursive cardinality models')
+    PG.set_list_to_comma_sep_attrs('BibTex')
     # abs_path = '/Users/spacegoing/AllSymlinks/macANU/honor' \
     #            'sProjects/Proposal/PAMI/pami14-linEnvLearn.pdf'
     # title = 'Learning Weighted Lower Linear Envelope Po' \
@@ -246,5 +307,5 @@ if __name__ == '__main__':
     # PG.add_paper(title, abs_path)
     # PG.display_papers_with_attrs()
     # PG.describe_paper('lwll')
-    PG.save_graph()
+    # PG.save_graph()
 ##
